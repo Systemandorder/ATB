@@ -22,3 +22,33 @@
 | Сервери під контролем | 33 000+ |
 
 ## Attack Chain
+Recon → Hardcoded creds у APK + незахищений Moodle endpoint
+SQL Injection → Boolean blind SQLi у фільтрі каталогу
+Supplier Portal → Реєстрація без модерації на SuiteCRM
+LFI → Читання конфігів через import функцію
+Webshell / RCE → PHP PHAR deserialization + WAF bypass
+Escalation → Grafana → Zabbix → root → SSH key → all systems
+
+## Структура
+
+├── README.md
+├── timeline.md
+├── attack-chain/
+│ ├── 01-recon.md
+│ ├── 02-sql-injection.md
+│ ├── 03-supplier-portal.md
+│ ├── 04-lfi.md
+│ ├── 05-webshell-rce.md
+│ └── 06-escalation.md
+├── impact/
+│ └── data-exposed.md
+└── defense/
+├── checklist.md
+└── mitigations.md
+
+
+## References
+
+- [The Record — ATB cyberattack](https://therecord.media/atb-ukraine-cyberattack-ransomware)
+- [Mezha.ua — ATB hacked](https://mezha.ua/en/news/atb-website-hacked-315842/)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
