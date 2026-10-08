@@ -29,22 +29,7 @@ LFI → Читання конфігів через import функцію
 Webshell / RCE → PHP PHAR deserialization + WAF bypass
 Escalation → Grafana → Zabbix → root → SSH key → all systems
 
-## Структура
 
-├── README.md
-├── timeline.md
-├── attack-chain/
-│ ├── 01-recon.md
-│ ├── 02-sql-injection.md
-│ ├── 03-supplier-portal.md
-│ ├── 04-lfi.md
-│ ├── 05-webshell-rce.md
-│ └── 06-escalation.md
-├── impact/
-│ └── data-exposed.md
-└── defense/
-├── checklist.md
-└── mitigations.md
 
 
 ## References
