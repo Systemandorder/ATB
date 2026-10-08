@@ -1,65 +1,55 @@
-# 01 — Reconnaissance
+# 01 — Розвідка
 
-## Вектор 1: Hardcoded credentials у APK
+## APK — коли секрет лежить у кишені
 
-### Що зробили
-
-Декомпіляція кількох версій APK через `jadx`:
+Мобільний додаток — це ZIP-архів. Його можна розпакувати і прочитати код.
+Інструмент `jadx` перетворює байткод назад у читабельний Java.
 
 ```bash
-jadx -d ./output app-v8.0.16.apk
-
-# Шукаємо секрети у декомпільованому коді
-grep -r "Authorization" ./output/
-grep -r "Basic " ./output/
-grep -r "password" ./output/ --include="*.java" -i
+jadx -d ./output app.apk
+grep -r "Basic " ./output/ --include="*.java"
 ```
 
-### Що знайшли
-Захардкоджений `Authorization: Basic` заголовок для API реєстрації.  
-Не змінювався між версіями 8.0.16 → 8.0.48.
+Знайшли рядок виду:
 
-### Чому спрацювало
+Authorization: Basic <base64-рядок>
 
-| Помилка | Пояснення |
-|---|---|
-| Hardcoded credentials | Секрет у APK замість backend-токена |
-| Без ротації | Пароль не змінювали після релізу |
-| APK публічний | Будь-хто може завантажити і декомпілювати |
 
-### Захист
-- Ніяких секретів у коді → backend-issued short-lived tokens
-- Static analysis у CI: `gitleaks`, `apkleaks`, `MobSF`
-- Certificate Pinning
+Base64 — це не шифрування, це просто кодування. Декодується за секунду:
+
+```bash
+echo "cmVnX3VzZXI6YmFzaWMq..." | base64 -d
+# → login:password
+```
+
+**Чому це катастрофа**: цей пароль лежав у APK незмінним через три версії додатку.
+Будь-хто, хто завантажив додаток, міг його витягти.
 
 ---
 
-## Вектор 2: Unauthenticated Moodle endpoint
+## Moodle — коли сервер відповідає всім без питань
 
-### Що зробили
+Сканер субдоменів (`subfinder`) знайшов `education.target.com` — портал навчання співробітників на Moodle.
+
+У Moodle є AJAX-ендпоінти для плагінів. Один із них:
 
 ```bash
-# Сканування субдоменів
-subfinder -d target.com -silent
-# → education.target.com
-
-# Відомий Moodle AJAX endpoint
-curl -s -X POST https://education.target.com/md/blocks/moco_news/ajax.php \
+curl -X POST https://education.target.com/md/blocks/moco_news/ajax.php \
   -d "procedure=getPosts"
 ```
 
-### Що знайшли
-Відповідь без авторизації: пароль БД, пароль SMTP, salt для хешів, список адмінів.
+Він відповів без жодної авторизації — і повернув конфіг сервера:
+пароль від бази даних, пароль від корпоративної пошти, сіль для хешів паролів.
 
-### Чому спрацювало
+**Аналогія**: уяви, що ти дзвониш на рецепцію і просиш "дайте паролі від сейфу" —
+і тобі просто дають, бо ніхто не написав правило "спочатку запитай хто це".
 
-| Помилка | Пояснення |
-|---|---|
-| Немає `require_login()` | Endpoint анонімний |
-| Повертає `$CFG` об'єкт | Вся конфігурація в JSON |
-| Сторонній плагін без аудиту | `moco_news` не перевірявся |
+---
 
-### Захист
-- `require_login()` + `require_capability()` на кожному AJAX endpoint
-- Ніколи не повертати конфіг-об'єкти в API
-- Аудит сторонніх плагінів
+## Що дала розвідка
+
+- Доступ до API реєстрації (hardcoded creds у APK)
+- Пароль від БД Moodle
+- Пароль від корпоративної пошти `education@...`
+- Сіль для хешів → допомагає зламувати паролі швидше
+- Список ID адміністраторів системи
